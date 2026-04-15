@@ -285,15 +285,18 @@ class TestT4GitTools:
     @pytest.mark.asyncio
     async def test_t4_1_non_repo_dir(self):
         """T4.1 git_status — non-repo directory returns error."""
+        import tempfile
         from opencode_agent.tools.git_tools import GitStatusTool
         from opencode_agent.base_types import ToolCall
         from opencode_agent.tools.base import ToolContext
         tool = GitStatusTool()
-        ctx = ToolContext(working_dir=str(PROJECT_ROOT / "tests" / "_tmp"), permissions=None)
-        tc = ToolCall(id="t4-1", name="git_status", input="{}")
-        res = await tool.run(ctx, tc)
-        assert res.is_error is True
-        print("  PASS")
+        # Use system temp dir to ensure we are outside any git repo
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx = ToolContext(working_dir=tmp, permissions=None)
+            tc = ToolCall(id="t4-1", name="git_status", input="{}")
+            res = await tool.run(ctx, tc)
+            assert res.is_error is True
+            print("  PASS")
 
     @pytest.mark.asyncio
     @pytest.mark.skipif(
@@ -603,3 +606,87 @@ class TestT8Session:
             print("  PASS")
         finally:
             await sm.close()
+
+# ===================================================================
+# T9: Ollama Provider
+# ===================================================================
+
+class TestT9OllamaProvider:
+    """T9: Ollama provider — construction, config, and management APIs."""
+
+    def test_t9_1_provider_construction(self):
+        """T9.1 OllamaProvider construction with host/port."""
+        from opencode_agent.provider.ollama_provider import OllamaProvider
+        provider = OllamaProvider(host="192.168.1.100", port=11434, model="llama3")
+        assert provider.model == "llama3"
+        assert provider.api_key == "ollama"
+        assert provider.base_url == "http://192.168.1.100:11434/v1"
+        assert provider.ollama_base == "http://192.168.1.100:11434"
+        print("  PASS")
+
+    def test_t9_2_host_normalization(self):
+        """T9.2 OllamaProvider normalizes various host formats."""
+        from opencode_agent.provider.ollama_provider import OllamaProvider
+
+        # With protocol prefix
+        p1 = OllamaProvider(host="http://10.0.0.5", port=8080, model="qwen2")
+        assert p1.base_url == "http://10.0.0.5:8080/v1"
+
+        # Plain IP
+        p2 = OllamaProvider(host="127.0.0.1", port=11434, model="llama3")
+        assert p2.base_url == "http://127.0.0.1:11434/v1"
+
+        # Hostname with path stripped
+        p3 = OllamaProvider(host="myserver.local/v1", port=11434, model="mistral")
+        assert p3.base_url == "http://myserver.local:11434/v1"
+
+        # Explicit base_url takes precedence
+        p4 = OllamaProvider(host="localhost", port=9999, model="llama3",
+                            base_url="http://custom:7777/v1")
+        assert p4.base_url == "http://custom:7777/v1"
+        print("  PASS")
+
+    def test_t9_3_config_enum(self):
+        """T9.3 ModelProvider.OLLAMA exists and config has defaults."""
+        from opencode_agent.config import ModelProvider, get_config, ProviderConfig
+        assert ModelProvider.OLLAMA.value == "ollama"
+
+        cfg = get_config()
+        ollama_cfg = cfg.providers.get(ModelProvider.OLLAMA)
+        assert ollama_cfg is not None
+        assert ollama_cfg.host == "localhost"
+        assert ollama_cfg.port == 11434
+        assert ollama_cfg.base_url == "http://localhost:11434/v1"
+        print("  PASS")
+
+    def test_t9_4_factory_creates_ollama(self):
+        """T9.4 create_provider returns OllamaProvider for OLLAMA."""
+        from opencode_agent.config import ModelProvider, init_config, AgentName, AgentConfig
+        from opencode_agent.provider import create_provider, OllamaProvider
+        init_config(
+            default_provider=ModelProvider.OLLAMA,
+            agents={AgentName.CODER: AgentConfig(model="llama3", max_tokens=4096)},
+        )
+        provider = create_provider("coder")
+        assert isinstance(provider, OllamaProvider)
+        assert provider.model == "llama3"
+        print("  PASS")
+
+    def test_t9_5_health_check_unreachable(self):
+        """T9.5 health_check raises ConnectionError for unreachable server."""
+        import asyncio
+        from opencode_agent.provider.ollama_provider import OllamaProvider
+
+        async def _run():
+            # Use a non-routable IP to guarantee failure
+            provider = OllamaProvider(host="192.0.2.1", port=11434, model="llama3")
+            try:
+                await provider.health_check()
+                assert False, "Should have raised ConnectionError"
+            except (ConnectionError, Exception) as e:
+                # ConnectTimeout maps to httpx.ConnectTimeout, which is a subclass of Exception
+                assert "connect" in type(e).__name__.lower() or "Cannot connect" in str(e), f"Unexpected error: {e}"
+                print("  PASS")
+
+        asyncio.run(_run())
+
