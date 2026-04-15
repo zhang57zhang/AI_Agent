@@ -7,6 +7,7 @@ from opencode_agent.provider.base import (
 )
 from opencode_agent.provider.openai_provider import OpenAIProvider
 from opencode_agent.provider.anthropic_provider import AnthropicProvider
+from opencode_agent.provider.ollama_provider import OllamaProvider
 
 from opencode_agent.config import AgentConfig, ModelProvider, get_config
 
@@ -70,6 +71,13 @@ def create_provider(
         if not kwargs.get("base_url"):
             kwargs["base_url"] = "https://openrouter.ai/api/v1"
         return OpenAIProvider(**kwargs)
+    elif provider == ModelProvider.OLLAMA:
+        provider_cfg = cfg.providers.get(provider)
+        ollama_kwargs = dict(kwargs)
+        if provider_cfg:
+            ollama_kwargs["host"] = provider_cfg.host
+            ollama_kwargs["port"] = provider_cfg.port
+        return OllamaProvider(**ollama_kwargs)
     else:
         # Default fallback
         return OpenAIProvider(**kwargs)
@@ -81,5 +89,6 @@ __all__ = [
     "ProviderTool",
     "OpenAIProvider",
     "AnthropicProvider",
+    "OllamaProvider",
     "create_provider",
 ]

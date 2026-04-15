@@ -21,6 +21,7 @@ class ModelProvider(str, Enum):
     ANTHROPIC = "anthropic"
     LOCAL = "local"  # OpenAI-compatible local endpoints (Ollama, vLLM, etc.)
     OPENROUTER = "openrouter"
+    OLLAMA = "ollama"  # Ollama local/remote server
 
 
 class AgentName(str, Enum):
@@ -70,6 +71,8 @@ class ProviderConfig(BaseSettings):
 
     api_key: str = ""
     base_url: str = ""  # Override default endpoint (useful for proxies/local models)
+    host: str = "localhost"  # Ollama server host (IP or hostname)
+    port: int = 11434  # Ollama server port
 
 
 class Config(BaseSettings):
@@ -93,6 +96,11 @@ class Config(BaseSettings):
             ModelProvider.ANTHROPIC: ProviderConfig(),
             ModelProvider.LOCAL: ProviderConfig(base_url="http://localhost:11434/v1"),
             ModelProvider.OPENROUTER: ProviderConfig(),
+            ModelProvider.OLLAMA: ProviderConfig(
+                base_url="http://localhost:11434/v1",
+                host="localhost",
+                port=11434,
+            ),
         }
     )
 
@@ -172,6 +180,7 @@ class Config(BaseSettings):
             ModelProvider.ANTHROPIC: "ANTHROPIC_API_KEY",
             ModelProvider.LOCAL: "OPENAI_API_KEY",  # local often uses same key format
             ModelProvider.OPENROUTER: "OPENROUTER_API_KEY",
+            ModelProvider.OLLAMA: "OLLAMA_API_KEY",
         }
         return os.environ.get(env_map.get(provider, ""), "")
 
