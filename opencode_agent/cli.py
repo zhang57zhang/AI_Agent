@@ -26,7 +26,12 @@ def parse_args() -> argparse.Namespace:
         "--provider", "-p",
         choices=[p.value for p in ModelProvider],
         default=None,
-        help="LLM provider (openai, anthropic, local, openrouter)",
+        help="LLM provider (openai, anthropic, local, openrouter, ollama)",
+    )
+    parser.add_argument(
+        "--ollama-url",
+        default=None,
+        help="Ollama server URL (e.g. http://192.168.1.100:11434). Sets --provider ollama automatically.",
     )
     parser.add_argument(
         "--agent", "-a",
@@ -96,7 +101,19 @@ def main() -> None:
 
     if args.model:
         overrides.setdefault("agents", {})[AgentName.CODER] = {"model": args.model}
-    if args.provider:
+    if args.ollama_url:
+        overrides["default_provider"] = ModelProvider.OLLAMA
+        # Parse host and port from URL
+        from urllib.parse import urlparse
+        parsed = urlparse(args.ollama_url)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 11434
+        overrides.setdefault("providers", {})[ModelProvider.OLLAMA] = {
+            "base_url": f"http://{host}:{port}/v1",
+            "host": host,
+            "port": port,
+        }
+    elif args.provider:
         overrides["default_provider"] = ModelProvider(args.provider)
     if args.working_dir:
         overrides["working_dir"] = Path(args.working_dir).resolve()
